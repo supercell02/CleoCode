@@ -7,17 +7,22 @@
     "dev": "bun run --watch src/index.tsx"
   },
   "devDependencies": {
+    "@CleoCode/server": "workspace:*",
     "@types/bun": "latest",
+    "@types/node": "^24.5.2",
     "@types/react": "^19.2.17"
   },
   "peerDependencies": {
     "typescript": "^5"
   },
   "dependencies": {
+    "@CleoCode/shared": "workspace:*",
     "@opentui/core": "^0.4.5",
     "@opentui/react": "^0.4.5",
+    "hono": "^4.13.4",
     "opentui-spinner": "^0.0.7",
     "react": "^19.2.6",
-    "react-router": "^8.3.0"
+    "react-router": "^8.3.0",
+    "zod": "^4.4.3"
   }
 }
