@@ -12,7 +12,6 @@ export function Home() {
     }, 
     [navigate]
     );
-
     return (
         <box 
             alignItems="center"
