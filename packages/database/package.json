@@ -7,7 +7,7 @@
         "./enums": "./src/enums.ts"
     },
     "scripts": {
-        "db:generate": "bunx prisma generate"
+        "db:generate": "bunx prisma@7.10.0 generate"
     },
     "devDependencies": {
         "@types/pg": "^8.23.1",
