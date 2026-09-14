@@ -1,0 +1,47 @@
+import { useCallback,} from "react";
+import { useDialog } from "../../providers/dialog";
+import { DialogSearchList } from "../../providers/dialog/dialog-search-list";
+import { Mode } from "@CleoCode/database/enums";
+
+const AVAILABLE_MODES : Mode[] = [Mode.PLAN, Mode.BUILD];
+type AgentsDialogContentProps = {
+    currentMode: Mode;
+    onSelectMode: (mode: Mode) => void;
+}
+
+function getModelLabel(mode: Mode){
+    return mode === Mode.PLAN ? "Plan" : "Build";
+}
+export const AgentsDialogContent = ({ 
+    currentMode, 
+    onSelectMode 
+}: AgentsDialogContentProps) => {
+    const dialog = useDialog();   
+
+    const handleSelect = useCallback(
+        (nextMode: Mode) => {
+            onSelectMode(nextMode);
+            dialog.close();
+        },
+        [onSelectMode, dialog]
+    );
+
+    return (
+        <DialogSearchList
+            items={AVAILABLE_MODES}
+            onSelect={handleSelect}
+            filterFn={(item, query) =>
+                getModelLabel(item).toLowerCase().includes(query.toLowerCase())
+            }
+            renderItem={(item, isSelected) => (
+                <text selectable={false} fg={isSelected ? "black" : "white"}>
+                    {item === currentMode ? "•" : " "}
+                    {getModelLabel(item)}
+                </text>
+            )}
+            getKey={(item) => item}
+            placeholder="Search modes"
+            emptyText="No matching modes"
+        />
+    );
+};

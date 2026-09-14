@@ -1,6 +1,11 @@
-import { ThemeDialogContent } from "../dialogs";
+import { 
+    AgentsDialogContent,
+    ModelsDialogContent,
+    SessionDialogContent, 
+    ThemeDialogContent } 
+    from "../dialogs";
 import type { Command } from "./types"
-
+import { SUPPORTED_CHAT_MODELS } from "@CleoCode/shared";
 export const COMMANDS: Command[]=[
     {
        name:"agents",
@@ -8,9 +13,9 @@ export const COMMANDS: Command[]=[
         value:"/agents" ,
         action: (ctx) => {
             ctx.dialog.open({
-                title: "Select an Agent",
-                children: <text>Agent selection coming soon..</text>
-            });
+                title: "Select agent",
+                children: <AgentsDialogContent currentMode={ctx.mode} onSelectMode={ctx.setMode} />
+            })
         }
     },
     {
@@ -19,9 +24,9 @@ export const COMMANDS: Command[]=[
         value:"/models",
         action: (ctx) => {
             ctx.dialog.open({
-                title: "Select Models",
-                children: <text>Model selection coming soon..</text>
-            });
+                title: "Select Model",
+                children: <ModelsDialogContent models={SUPPORTED_CHAT_MODELS.map((model) => model.id)} onSelectModel={ctx.setModel} />
+            })
         }
     },
     {
@@ -29,7 +34,10 @@ export const COMMANDS: Command[]=[
         description:"Browse and manage your sessions",
         value:"/sessions",
         action: (ctx) => {
-            ctx.toast.show({ message: "Loading sessions..." });
+            ctx.dialog.open({
+                title: "Sessions",
+                children: <SessionDialogContent />
+            })
         }
     },
     {
@@ -72,7 +80,7 @@ export const COMMANDS: Command[]=[
         description:"Start a new conversation",
         value:"/new",
         action: (ctx) => {
-            ctx.toast.show({ message: "Starting a new conversation...", variant: "info" });
+            ctx.navigate("/");
         }
     },
     {

@@ -138,7 +138,7 @@ export function Session() {
         const res = await apiClient.sessions[":id"].$get({
            param: { id } 
           });
-        if (!ignore) return;
+        if (ignore) return;
         if (!res.ok) throw new Error(await getErrorMessage(res));
         const resolved = await res.json();
         setSession(resolved);
