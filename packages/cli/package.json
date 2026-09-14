@@ -20,6 +20,7 @@
     "@CleoCode/shared": "workspace:*",
     "@opentui/core": "^0.4.5",
     "@opentui/react": "^0.4.5",
+    "date-fns": "^4.4.0",
     "eventsource-parser": "^4.1.0",
     "hono": "^4.13.4",
     "opentui-spinner": "^0.0.7",

@@ -1,15 +1,22 @@
 import { TextAttributes } from "@opentui/core";
 import { useTheme } from "../providers/theme";
+import { usePromptConfig } from "../providers/prompt-config";
+import { Mode } from "@Cleocode/database/enums";
 
-export function StatusBar() {   
+export function StatusBar() { 
+    const { mode, model } = usePromptConfig();
     const { colors } = useTheme();
     return (
         <box flexDirection="row" gap={1}>
-            <text fg={colors.primary}>Build</text>
+            <text fg={ mode === Mode.PLAN ? colors.planMode : colors.primary}>
+                {mode === Mode.BUILD ? "Build" : "Plan"}
+            </text>
             <text attributes={TextAttributes.DIM} fg={colors.dimSeparator}>
                 &#8250;
             </text>           
-            <text>opus-4-6</text>
+            <text fg={colors.primary}>
+                {model}
+            </text>
         </box>
     )
 }

@@ -1,6 +1,6 @@
 import { useRef, useCallback, useEffect } from "react";
 import type { TextareaRenderable } from "@opentui/core";
-import { useRenderer } from "@opentui/react";
+import { useKeyboard,useRenderer } from "@opentui/react";
 import type { KeyBinding } from "@opentui/core";
 import { EmptyBorder } from "./border";
 import { StatusBar } from "./status-bar";
@@ -11,7 +11,9 @@ import { useToast } from "../providers/toast";
 import { useKeyboardLayer } from "../providers/keyboard-layer";
 import { useDialog } from "../providers/dialog";
 import { useTheme } from "../providers/theme";
-
+import { useNavigate } from "react-router";
+import { usePromptConfig } from "../providers/prompt-config";
+import { Mode } from "@Cleocode/database/enums";
 
 type Props = {
     onSubmit: (value: string) => void;
@@ -26,11 +28,12 @@ export const TEXTAREA_KEY_BINDINGS: KeyBinding[]= [
 ]
 
 export function InputBar({ onSubmit, disabled }: Props) {
+    const { mode, toggleMode, setMode, setModel } = usePromptConfig();
     const textareaRef = useRef<TextareaRenderable>(null);
     const onSubmitRef = useRef<() => void>(() => {});
     const renderer = useRenderer();
     const toast = useToast();
-
+    const navigate = useNavigate();
     const dialog = useDialog();
     const { isTopLayer, setResponder } = useKeyboardLayer();
 
@@ -77,11 +80,15 @@ export function InputBar({ onSubmit, disabled }: Props) {
                 exit: () => renderer.destroy(),
                 toast,
                 dialog,
+                mode,
+                navigate,
+                setMode,
+                setModel,
             });
         } else {
             textarea.insertText(command.value + " ");
         }
-    }, [renderer, toast, dialog]);
+    }, [mode,setMode, setModel, renderer, toast, dialog, navigate]);
     
     const handleCommandExecute = useCallback(
         (index: number) => {
@@ -112,6 +119,16 @@ export function InputBar({ onSubmit, disabled }: Props) {
     }
 
 
+
+    useKeyboard((key) => {
+        if(disabled) return;
+        if(!isTopLayer("base")) return;
+        if(key.name === "tab"){
+            key.preventDefault();
+            toggleMode();
+        }
+    })
+
     useEffect(() => {
         setResponder("base",() =>{
             if (disabled) return false;
@@ -131,7 +148,7 @@ export function InputBar({ onSubmit, disabled }: Props) {
         <box width="100%" alignItems="center">
             <box
                 border={["left"]}
-                borderColor={colors.primary}
+                borderColor={mode === Mode.BUILD ? colors.primary : colors.planMode}
                 customBorderChars={{
                     ...EmptyBorder,
                     vertical: "┃",
