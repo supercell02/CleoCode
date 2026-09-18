@@ -14,6 +14,10 @@ export const messagePartSchema = z.discriminatedUnion("type",[
         args: toolCallArgsSchema,
         result:z.string().optional(),
     }),
+     z.object({
+        type:z.literal("text"),
+        text:z.string(),
+    }),
 ])
 
 export const messagePartsSchema = z.array(messagePartSchema);

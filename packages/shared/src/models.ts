@@ -69,4 +69,4 @@ export function findSupportedChatModel(modelId: string){
     return SUPPORTED_CHAT_MODELS.find((model) => model.id === modelId);
 }
 
-export const DEFAULT_CHAT_MODEL_ID: SupportedChatModelId = "gpt-5.4-nano";
+export const DEFAULT_CHAT_MODEL_ID: SupportedChatModelId = "gpt-5.4";
