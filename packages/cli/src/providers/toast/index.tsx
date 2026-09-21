@@ -96,6 +96,7 @@ function Toast({ currentToasts }: ToastProps) {
             paddingLeft={2}
             paddingRight={2}
             paddingTop={1}
+            paddingBottom={1}
             backgroundColor={colors.surface}
             borderColor={borderColor}
             border={["left","right"]}

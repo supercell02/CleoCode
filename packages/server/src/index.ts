@@ -3,8 +3,10 @@ import { sentry } from "@sentry/hono/bun";
 import * as Sentry from "@sentry/hono/bun";
 import { HTTPException } from 'hono/http-exception';
 import sessions from './routes/sessions';
-
+import { requireAuth } from './middleware/require-auth';
 import chat from './routes/chat';
+import auth from './routes/auth';
+
 const app = new Hono();
 
 app.use(
@@ -51,7 +53,12 @@ app.onError((error, c) => {
     }, 500);
 });
 
-const routes = app.route('/sessions', sessions).route('/chat',chat);
+app.use("/sessions/*",requireAuth);
+app.use("/chat/*",requireAuth);
+const routes = app
+  .route('/auth', auth)
+  .route('/sessions', sessions)
+  .route('/chat',chat);
 
 export type AppType = typeof routes;
 
