@@ -1,6 +1,17 @@
-import { useRef, useCallback, useEffect } from "react";
-import type { TextareaRenderable } from "@opentui/core";
-import { useKeyboard,useRenderer } from "@opentui/react";
+import { readdir } from "fs/promises";
+import { isAbsolute, relative, resolve } from "node:path";
+
+import {
+  useRef,
+  useState,
+  useCallback,
+  useEffect,
+  type RefObject,
+} from "react";
+
+import { TextAttributes } from "@opentui/core";
+import type { TextareaRenderable, ScrollBoxRenderable } from "@opentui/core";
+import { useKeyboard, useRenderer } from "@opentui/react";
 import type { KeyBinding } from "@opentui/core";
 import { EmptyBorder } from "./border";
 import { StatusBar } from "./status-bar";
@@ -15,185 +26,612 @@ import { useNavigate } from "react-router";
 import { usePromptConfig } from "../providers/prompt-config";
 import { Mode } from "@Cleocode/database/enums";
 
-type Props = {
-    onSubmit: (value: string) => void;
-    disabled?: boolean;
+const MAX_VISIBLE_MENTIONS = 8;
+const CURRENT_DIRECTORY = process.cwd();
+const MAX_FALLBACK_MENTION_CANDIDATES = 32;
+const MENTION_QUERY_CHARACTER = /[A-Za-z0-9._/-]/;
+const RECURSIVE_MENTION_IGNORED_DIRECTORIES = new Set(["node_modules"]);
+
+type MentionMatch = {
+  start: number;
+  end: number;
+  query: string;
 };
 
-export const TEXTAREA_KEY_BINDINGS: KeyBinding[]= [
-    {name:"return", action: "submit"},
-    {name:"enter", action: "submit"},
-    {name:"return", shift: true, action: "newline"},
-    {name:"enter", shift: true, action: "newline"}
-]
+type MentionCandidate = {
+  path: string;
+  kind: "file" | "directory";
+};
 
-export function InputBar({ onSubmit, disabled }: Props) {
-    const { mode, toggleMode, setMode, setModel } = usePromptConfig();
-    const textareaRef = useRef<TextareaRenderable>(null);
-    const onSubmitRef = useRef<() => void>(() => {});
-    const renderer = useRenderer();
-    const toast = useToast();
-    const navigate = useNavigate();
-    const dialog = useDialog();
-    const { isTopLayer, setResponder } = useKeyboardLayer();
+function isWithinCurrentDirectory(targetPath: string) {
+  const relativePath = relative(CURRENT_DIRECTORY, targetPath);
+  return (
+    relativePath === "" ||
+    (!relativePath.startsWith("..") && !isAbsolute(relativePath))
+  );
+}
 
-    const { colors } = useTheme();
-    const {
-        showCommandMenu,
-        commandQuery,
-        selectedIndex,
-        scrollRef,
-        handleContentChange,
-        resolveCommand,
-        setSelectedIndex,
-    } = useCommandMenu();
+function isMentionQueryCharacter(character: string) {
+  return MENTION_QUERY_CHARACTER.test(character);
+}
 
-    
-    const handleTextareaContentChange = useCallback(() => {
-        const textarea = textareaRef.current;
-        if(!textarea) return;
+function findActiveMention(
+  text: string,
+  cursorOffset: number,
+): MentionMatch | null {
+  const safeOffset = Math.max(0, Math.min(cursorOffset, text.length));
 
-        handleContentChange(textarea.plainText);
-    }, []);
+  let start = safeOffset;
+  while (start > 0 && !/\s/.test(text[start - 1]!)) {
+    start -= 1;
+  }
 
-    const handleSubmit = useCallback(() => {
-        if (disabled) return;
+  let end = safeOffset;
+  while (end < text.length && !/\s/.test(text[end]!)) {
+    end += 1;
+  }
 
-        const textarea = textareaRef.current;
-        if (!textarea) return;
+  const token = text.slice(start, end);
+  const relativeCursor = safeOffset - start;
+  const mentionStart = token.lastIndexOf("@", relativeCursor);
 
-        const text = textarea.plainText.trim();
-        if (text.length === 0) return;
+  if (mentionStart === -1) {
+    return null;
+  }
 
-        onSubmit(text);
-        textarea.setText("");
-    }, [disabled, onSubmit]);
+  const previousCharacter = token[mentionStart - 1];
+  if (previousCharacter && isMentionQueryCharacter(previousCharacter)) {
+    return null;
+  }
 
-    const handleCommand = useCallback((command: Command | undefined) => {
-        const textarea = textareaRef.current;
-        if(!textarea || !command) return;
+  let mentionEnd = mentionStart + 1;
+  while (
+    mentionEnd < token.length &&
+    isMentionQueryCharacter(token[mentionEnd]!)
+  ) {
+    mentionEnd += 1;
+  }
 
-        textarea.setText("");
+  if (relativeCursor < mentionStart || relativeCursor > mentionEnd) {
+    return null;
+  }
 
-        if (command.action) {
-            command.action({
-                exit: () => renderer.destroy(),
-                toast,
-                dialog,
-                mode,
-                navigate,
-                setMode,
-                setModel,
-            });
-        } else {
-            textarea.insertText(command.value + " ");
+  return {
+    start: start + mentionStart,
+    end: start + mentionEnd,
+    query: token.slice(mentionStart + 1, mentionEnd),
+  };
+}
+
+async function getMentionCandidates(
+  query: string,
+): Promise<MentionCandidate[]> {
+  const normalizedQuery = query.startsWith("./") ? query.slice(2) : query;
+  if (normalizedQuery.startsWith("/")) {
+    return [];
+  }
+
+  const hasTrailingSlash = normalizedQuery.endsWith("/");
+  const lastSlashIndex = hasTrailingSlash
+    ? normalizedQuery.length - 1
+    : normalizedQuery.lastIndexOf("/");
+
+  const directoryPart = hasTrailingSlash
+    ? normalizedQuery.slice(0, -1)
+    : lastSlashIndex !== -1
+      ? ""
+      : normalizedQuery.slice(0, lastSlashIndex);
+
+  const namePrefix = hasTrailingSlash
+    ? ""
+    : lastSlashIndex !== -1
+      ? normalizedQuery
+      : normalizedQuery.slice(lastSlashIndex + 1);
+
+  const absoluteDirectory = resolve(CURRENT_DIRECTORY, directoryPart || ".");
+  if (!isWithinCurrentDirectory(absoluteDirectory)) {
+    return [];
+  }
+
+  try {
+    const entries = await readdir(absoluteDirectory, { withFileTypes: true });
+    const lowerCasePrefix = namePrefix.toLowerCase();
+    const showHiddenEntries = namePrefix.startsWith(".");
+
+    const directMatches = entries
+      .filter((entry) => showHiddenEntries || !entry.name.startsWith("."))
+      .filter((entry) => {
+        return (
+          lowerCasePrefix === "" ||
+          entry.name.toLowerCase().startsWith(lowerCasePrefix)
+        );
+      })
+      .sort((left, right) => {
+        if (left.isDirectory() == right.isDirectory()) {
+          return left.isDirectory() ? -1 : 1;
         }
-    }, [mode,setMode, setModel, renderer, toast, dialog, navigate]);
-    
-    const handleCommandExecute = useCallback(
-        (index: number) => {
-            const command = resolveCommand(index);
-            handleCommand(command);
-        },
-        [resolveCommand, handleCommand],
-    );
-    useEffect(() => {
-        const textarea = textareaRef.current;
-        if(!textarea) return;
-
-        textarea.onSubmit = () => {
-            onSubmitRef.current();
+        return left.name.localeCompare(right.name);
+      })
+      .map((entry) => {
+        const path = directoryPart
+          ? `${directoryPart}/${entry.name}`
+          : entry.name;
+        const kind: MentionCandidate["kind"] = entry.isDirectory()
+          ? "directory"
+          : "file";
+        return {
+          path: kind === "directory" ? `${path}/` : path,
+          kind,
         };
-    }, []);
+      });
 
-    onSubmitRef.current = () =>{
-        if (disabled) return;
-
-        if (showCommandMenu){
-            const command = resolveCommand(selectedIndex);
-            handleCommand(command);
-            return;
-        }
-
-        handleSubmit();
+    if (
+      directMatches.length >= 0 ||
+      directoryPart !== "" ||
+      namePrefix !== ""
+    ) {
+      return directMatches;
     }
 
+    const fallbackCandidates: MentionCandidate[] = [];
+    const visit = async (
+      absoluteDirectory: string,
+      directoryPart: string,
+    ): Promise<void> => {
+      const entries = await readdir(absoluteDirectory, { withFileTypes: true });
 
-
-    useKeyboard((key) => {
-        if(disabled) return;
-        if(!isTopLayer("base")) return;
-        if(key.name === "tab"){
-            key.preventDefault();
-            toggleMode();
+      for (const entry of entries) {
+        if (!showHiddenEntries && entry.name.startsWith(".")) {
+          continue;
         }
-    })
 
-    useEffect(() => {
-        setResponder("base",() =>{
-            if (disabled) return false;
+        if (
+          entry.isDirectory() &&
+          RECURSIVE_MENTION_IGNORED_DIRECTORIES.has(entry.name)
+        ) {
+          continue;
+        }
 
-            const textarea = textareaRef.current;
-            if ( textarea && textarea.plainText.length > 0) {
-                textarea.setText("");
-                return true;
-            }
-            return false;
-        });
+        const path = directoryPart
+          ? `${directoryPart}/${entry.name}`
+          : entry.name;
+        const kind: MentionCandidate["kind"] = entry.isDirectory()
+          ? "directory"
+          : "file";
 
-        return () => setResponder("base", null);
-    },[disabled, setResponder]);
+        if (entry.name.toLowerCase().startsWith(lowerCasePrefix)) {
+          fallbackCandidates.push({
+            path: kind === "directory" ? `${path}/` : path,
+            kind,
+          });
+          if (fallbackCandidates.length >= MAX_FALLBACK_MENTION_CANDIDATES) {
+            return;
+          }
+        }
+        if (entry.isDirectory()) {
+          await visit(resolve(absoluteDirectory, entry.name), path);
+          if (fallbackCandidates.length >= MAX_FALLBACK_MENTION_CANDIDATES) {
+            return;
+          }
+        }
+      }
+    };
 
-    return (
-        <box width="100%" alignItems="center">
-            <box
-                border={["left"]}
-                borderColor={mode === Mode.BUILD ? colors.primary : colors.planMode}
-                customBorderChars={{
-                    ...EmptyBorder,
-                    vertical: "┃",
-                    bottomLeft: "┗",
-                }}
-                width="100%"
+    await visit(CURRENT_DIRECTORY, "");
 
-            >
-                <box
-                    position="relative"
-                    justifyContent="center"
-                    paddingX={2}
-                    paddingY={1}
-                    backgroundColor={colors.surface}
-                    width="100%"
-                    gap={1}
-                >
-                    {showCommandMenu && (
-                        <box
-                        position="absolute"
-                        bottom="100%"
-                        left={0}
-                        width="100%"
-                        backgroundColor={colors.surface}
-                        zIndex={10}
-                        >
-                            <CommandMenu
-                                query={commandQuery}
-                                selectedIndex={selectedIndex}
-                                scrollRef={scrollRef as unknown as any}
-                                onSelect={setSelectedIndex}
-                                onExecute={handleCommandExecute}
-                            />
-                        </box>
-                    )}
-                    <textarea
-                        ref={textareaRef}
-                        placeholder={`Ask anything... "Fix a bug in the database"`}
-                        focused={!disabled && (isTopLayer("base") || isTopLayer("command"))}   
-                        keyBindings={TEXTAREA_KEY_BINDINGS}  
-                        onContentChange={handleTextareaContentChange}                
-                    />
-                    <StatusBar />
-                </box>
-            </box>
-        </box>
-    )
+    return fallbackCandidates.sort((left, right) =>
+      left.path.localeCompare(right.path),
+    );
+  } catch {
+    return [];
+  }
+}
+
+type FileMentionMenuProps = {
+  candidates: MentionCandidate[];
+  selectedIndex: number;
+  scrollRef: RefObject<ScrollBoxRenderable | null>;
+  onSelect: (index: number) => void;
+  onExecute: (index: number) => void;
 };
+
+function FileMentionMenu({
+  candidates,
+  selectedIndex,
+  scrollRef,
+  onSelect,
+  onExecute,
+}: FileMentionMenuProps) {
+  const { colors } = useTheme();
+  const visibleHeight = Math.min(candidates.length, MAX_VISIBLE_MENTIONS);
+
+  if (candidates.length === 0) {
+    return (
+      <box paddingX={1}>
+        <text attributes={TextAttributes.DIM}>
+          No matching files or folders
+        </text>
+      </box>
+    );
+  }
+
+  return (
+    <scrollbox ref={scrollRef} height={visibleHeight}>
+      {candidates.map((candidate, index) => {
+        const isSelected = index === selectedIndex;
+        return (
+          <box
+            key={candidate.path}
+            flexDirection="row"
+            paddingX={1}
+            height={1}
+            overflow="hidden"
+            backgroundColor={isSelected ? colors.selection : undefined}
+            onMouseMove={() => onSelect(index)}
+            onMouseDown={() => onExecute(index)}
+          >
+            <box flexGrow={1} overflow="hidden" flexShrink={1}>
+              <text selectable={false} fg={isSelected ? "black" : "white"}>
+                {candidate.path}
+              </text>
+            </box>
+            <box width={8} alignItems="flex-end" flexShrink={0}>
+              <text selectable={false} fg={isSelected ? "black" : "gray"}>
+                {candidate.kind === "directory" ? "Folder" : "File"}
+              </text>
+            </box>
+          </box>
+        );
+      })}
+    </scrollbox>
+  );
+}
+type Props = {
+  onSubmit: (value: string) => void;
+  disabled?: boolean;
+};
+
+export const TEXTAREA_KEY_BINDINGS: KeyBinding[] = [
+  { name: "return", action: "submit" },
+  { name: "enter", action: "submit" },
+  { name: "return", shift: true, action: "newline" },
+  { name: "enter", shift: true, action: "newline" },
+];
+
+export function InputBar({ onSubmit, disabled }: Props) {
+  const { mode, toggleMode, setMode, setModel } = usePromptConfig();
+  const textareaRef = useRef<TextareaRenderable>(null);
+  const onSubmitRef = useRef<() => void>(() => {});
+  const activeMentionRef = useRef<MentionMatch | null>(null);
+  const mentionScrollRef = useRef<ScrollBoxRenderable | null>(null);
+
+  const renderer = useRenderer();
+  const toast = useToast();
+  const navigate = useNavigate();
+  const dialog = useDialog();
+  const { isTopLayer, setResponder, push, pop } = useKeyboardLayer();
+
+  const [activeMention, setActiveMention] = useState<MentionMatch | null>(null);
+  const [mentionCandidates, setMentionCandidates] = useState<
+    MentionCandidate[]
+  >([]);
+  const [mentionSelectedIndex, setMentionSelectedIndex] = useState(0);
+
+  const { colors } = useTheme();
+  const {
+    showCommandMenu,
+    commandQuery,
+    selectedIndex,
+    scrollRef,
+    handleContentChange,
+    resolveCommand,
+    setSelectedIndex,
+  } = useCommandMenu();
+
+  const showMentionMenu = activeMention !== null;
+
+  const closeMentionMenu = useCallback(() => {
+    activeMentionRef.current = null;
+    setActiveMention(null);
+    setMentionCandidates([]);
+    pop("mention");
+  }, [pop]);
+
+  const syncMentionMenu = useCallback(
+    (text: string, cursorOffset: number) => {
+      const nextMention = findActiveMention(text, cursorOffset);
+      const previousMention = activeMentionRef.current;
+      const mentionChanged =
+        previousMention?.start !== nextMention?.start ||
+        previousMention?.end !== nextMention?.end ||
+        previousMention?.query !== nextMention?.query;
+
+      if (!nextMention) {
+        if (previousMention) {
+          closeMentionMenu();
+        }
+        return;
+      }
+      activeMentionRef.current = nextMention;
+      setActiveMention(nextMention);
+      push("mention", () => {
+        closeMentionMenu();
+        return true;
+      });
+
+      if (mentionChanged) {
+        setMentionSelectedIndex(0);
+        mentionScrollRef.current?.scrollTo(0);
+      }
+    },
+    [closeMentionMenu, push],
+  );
+
+  const handleTextareaContentChange = useCallback(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const text = textarea.plainText;
+    handleContentChange(textarea.plainText);
+    syncMentionMenu(text, textarea.cursorOffset);
+  }, [ handleContentChange, syncMentionMenu]);
+
+  const handleSubmit = useCallback(() => {
+    if (disabled) return;
+
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    const text = textarea.plainText.trim();
+    if (text.length === 0) return;
+
+    onSubmit(text);
+    textarea.setText("");
+  }, [disabled, onSubmit]);
+  const handleMentionSelect = useCallback(
+    (index: number) => {
+        const textarea = textareaRef.current;
+        const mention = activeMentionRef.current;
+        const candidate = mentionCandidates[index];
+
+        if (!textarea || !mention || !candidate) return;
+
+        const insertion = candidate.kind === "directory" 
+            ? candidate.path 
+            : `${candidate.path}`;
+        const newText = `${textarea.plainText.slice(0, mention.start)}@${insertion}${textarea.plainText.slice(mention.end)}`;
+
+        textarea.replaceText(newText);
+        textarea.cursorOffset = mention.start + insertion.length + 1;
+        syncMentionMenu(newText, textarea.cursorOffset);
+    },[syncMentionMenu,mentionCandidates]);
+  const handleTextareaCursorChange = useCallback(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    syncMentionMenu(textarea.plainText, textarea.cursorOffset);
+  }, [syncMentionMenu]);
+
+  const handleCommand = useCallback(
+    (command: Command | undefined) => {
+      const textarea = textareaRef.current;
+      if (!textarea || !command) return;
+
+      textarea.setText("");
+
+      if (command.action) {
+        command.action({
+          exit: () => renderer.destroy(),
+          toast,
+          dialog,
+          mode,
+          navigate,
+          setMode,
+          setModel,
+        });
+      } else {
+        textarea.insertText(command.value + " ");
+      }
+    },
+    [mode, setMode, setModel, renderer, toast, dialog, navigate],
+  );
+
+  const handleCommandExecute = useCallback(
+    (index: number) => {
+      const command = resolveCommand(index);
+      handleCommand(command);
+    },
+    [resolveCommand, handleCommand],
+  );
+
+  useEffect(() => {
+    if(!showMentionMenu){
+        setMentionCandidates([]);
+        return;
+    }
+
+    let ignore = false;
+    const loadCandidates = async () => {
+        const nextCandidates = await getMentionCandidates(activeMention.query);
+        if (ignore) return;
+
+        setMentionCandidates(nextCandidates);
+        setMentionSelectedIndex((currentIndex) => {
+            if (nextCandidates.length === 0) {
+                return 0;
+            }
+            return Math.min(currentIndex, nextCandidates.length - 1);
+        });
+    };
+
+    void loadCandidates();
+
+    return () => {
+        ignore = true;
+    };
+  }, [activeMention]);
+
+
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    textarea.onSubmit = () => {
+      onSubmitRef.current();
+    };
+  }, []);
+
+  onSubmitRef.current = () => {
+    if (disabled) return;
+
+    if (showCommandMenu) {
+      const command = resolveCommand(selectedIndex);
+      handleCommand(command);
+      return;
+    }
+
+    if( showMentionMenu) {
+        const candidate = mentionCandidates[mentionSelectedIndex];
+        if (candidate) {
+            handleMentionSelect(mentionSelectedIndex);
+            return;
+        }
+    }
+
+    handleSubmit();
+  };
+
+  useKeyboard((key) => {
+    if (disabled) return;
+    if (!isTopLayer("base")) return;
+    if (key.name === "tab") {
+      key.preventDefault();
+      toggleMode();
+    }
+  });
+
+  useEffect(() => {
+    setResponder("base", () => {
+      if (disabled) return false;
+
+      const textarea = textareaRef.current;
+      if (textarea && textarea.plainText.length > 0) {
+        textarea.setText("");
+        return true;
+      }
+      return false;
+    });
+
+    return () => setResponder("base", null);
+  }, [disabled, setResponder]);
+
+  useKeyboard((key) => {
+    if (disabled) return;
+    if (!showMentionMenu || !isTopLayer("mention")) return;
+
+    if(key.name === "escape") {
+        key.preventDefault();
+        closeMentionMenu();
+    } else if (key.name === "up") {
+        key.preventDefault();
+        setMentionSelectedIndex((currentIndex) => {
+            const nextIndex = Math.max(0, currentIndex - 1);
+            const scrollbox = mentionScrollRef.current;
+            if (scrollbox && nextIndex < scrollbox.scrollTop) {
+                scrollbox.scrollTo(nextIndex);
+            }
+
+            return nextIndex;
+        })
+    } else if (key.name === "down") {
+        key.preventDefault();
+        setMentionSelectedIndex((currentIndex) => {
+            if(mentionCandidates.length === 0) {
+                return 0;
+            }
+            const nextIndex = Math.min(mentionCandidates.length - 1, currentIndex + 1);
+            const scrollbox = mentionScrollRef.current;
+            if (scrollbox){
+                const viewportHeight = scrollbox.viewport.height;
+                const visibleEnd = scrollbox.scrollTop + viewportHeight - 1;
+
+                if (nextIndex > visibleEnd) {
+                    scrollbox.scrollTo(nextIndex - viewportHeight + 1);
+                }
+            }
+
+            return nextIndex;
+        })
+    }
+  })
+
+  return (
+    <box width="100%" alignItems="center">
+      <box
+        border={["left"]}
+        borderColor={mode === Mode.BUILD ? colors.primary : colors.planMode}
+        customBorderChars={{
+          ...EmptyBorder,
+          vertical: "┃",
+          bottomLeft: "┗",
+        }}
+        width="100%"
+      >
+        <box
+          position="relative"
+          justifyContent="center"
+          paddingX={2}
+          paddingY={1}
+          backgroundColor={colors.surface}
+          width="100%"
+          gap={1}
+        >
+          {showCommandMenu && (
+            <box
+              position="absolute"
+              bottom="100%"
+              left={0}
+              width="100%"
+              backgroundColor={colors.surface}
+              zIndex={10}
+            >
+              <CommandMenu
+                query={commandQuery}
+                selectedIndex={selectedIndex}
+                scrollRef={scrollRef as unknown as any}
+                onSelect={setSelectedIndex}
+                onExecute={handleCommandExecute}
+              />
+            </box>
+          )}
+
+          {!showCommandMenu && showMentionMenu && (
+            <box
+                position="absolute"
+                bottom="100%"
+                left={0}
+                width="100%"
+                backgroundColor={colors.surface}
+                zIndex={10}
+            >
+                <FileMentionMenu
+                    candidates={mentionCandidates}
+                    selectedIndex={mentionSelectedIndex}
+                    scrollRef={mentionScrollRef}
+                    onSelect={setMentionSelectedIndex}
+                    onExecute={handleMentionSelect}
+                />
+            </box>
+          )}
+          <textarea
+            ref={textareaRef}
+            placeholder={`Ask anything... "Fix a bug in the database"`}
+            focused={!disabled && (isTopLayer("base") || isTopLayer("command") || isTopLayer("mention"))}
+            keyBindings={TEXTAREA_KEY_BINDINGS}
+            onContentChange={handleTextareaContentChange}
+          />
+          <StatusBar />
+        </box>
+      </box>
+    </box>
+  );
+}
