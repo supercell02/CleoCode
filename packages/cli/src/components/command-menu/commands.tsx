@@ -6,7 +6,7 @@ import {
     from "../dialogs";
 import type { Command } from "./types"
 import { SUPPORTED_CHAT_MODELS } from "@CleoCode/shared";
-
+import { openBillingPortal , openUpgradeCheckout} from "../../lib/upgrade";
 import { performLogin } from "../../lib/oauth";
 import { clearAuth } from "../../lib/auth";
 export const COMMANDS: Command[]=[
@@ -86,8 +86,18 @@ export const COMMANDS: Command[]=[
         name:"upgrade",
         description:"Buy more credits",
         value:"/upgrade",
-        action: (ctx) => {
+        action: async (ctx) => {
             ctx.toast.show({ message: "Opening credit checkout..." });
+            try {
+                await openUpgradeCheckout();
+                ctx.toast.show({
+                    variant: "success",
+                    message: "Credit checkout opened in your browser.",
+                })
+            } catch (error) {
+                const message = error instanceof Error ? error.message : "Failed to open credit checkout.";
+                ctx.toast.show({ message, variant: "error" });
+            }
         }
     },
     {
@@ -102,8 +112,18 @@ export const COMMANDS: Command[]=[
         name:"usage",
         description:"Open billing portal in your browser",
         value:"/usage",
-        action: (ctx) => {
+        action: async(ctx) => {
             ctx.toast.show({ message: "Opening billing portal..." });
+            try {
+                await openBillingPortal();
+                ctx.toast.show({
+                    variant: "success",
+                    message: "Billing portal opened in your browser.",
+                })
+            } catch (error) {
+                const message = error instanceof Error ? error.message : "Failed to open billing portal.";
+                ctx.toast.show({ message, variant: "error" });
+            }
         }
     },
     {
