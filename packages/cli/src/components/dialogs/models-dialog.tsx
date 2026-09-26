@@ -1,7 +1,6 @@
 import { useCallback,} from "react";
 import { useDialog } from "../../providers/dialog";
 import { DialogSearchList } from "../../providers/dialog/dialog-search-list";
-import { Mode } from "@CleoCode/database/enums";
 import type { SupportedChatModelId } from "@CleoCode/shared";
 
 type ModelsDialogContentProps = {

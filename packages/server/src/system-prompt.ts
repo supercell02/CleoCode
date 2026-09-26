@@ -1,21 +1,17 @@
-import type { Mode } from "@CleoCode/database/enums";
+import type { ModeType } from "@CleoCode/shared";
 
 type SystemPromptParams ={
-    cwd: string | null;
-    mode: Mode;
+    mode: ModeType;
 };
 
-export function buildSystemPrompt({ cwd, mode }: SystemPromptParams): string {
+export function buildSystemPrompt({ mode }: SystemPromptParams): string {
     const parts: string[] = [];
 
     parts.push(`You are a expert software engineer working as a coding assistant inside a terminal application.
          The application has two modes the user can switch between:
          - **PLAN** - Read-only analysis and planing. No file modifications.
          - **BUILD** - Full implementation with read and write tools.`);
-    if (cwd) {
-        parts.push(`\n The user's project directory is: ${cwd}`);
-    }
-
+    
     if (mode === "PLAN") {
         parts.push(`
             ## Mode: PLAN
@@ -35,7 +31,7 @@ export function buildSystemPrompt({ cwd, mode }: SystemPromptParams): string {
             `);
     }
 
-    if ( cwd && mode === "PLAN"){
+    if ( mode === "PLAN"){
         parts.push(`
             # Tool Usage
             You have these tools available:
@@ -49,7 +45,7 @@ export function buildSystemPrompt({ cwd, mode }: SystemPromptParams): string {
             3. **Batch your tool calls.** Call multiple tools in parallel when possible (e.g. read 5 files at once, not one at a time).
             `);
     }
-    if ( cwd && mode === "BUILD"){
+    if ( mode === "BUILD"){
         parts.push(`
             # Tool Usage
             You have these tools available:

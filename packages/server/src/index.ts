@@ -49,9 +49,21 @@ app.onError((error, c) => {
         method: c.req.method,
         message: error instanceof Error ? error.message : "Unknown error" ,
     });
+
+    const isDevelopment = process.env.NODE_ENV !== "production";
+
+    if (isDevelopment) {
+      console.error("Unhandled server error", {
+        path: c.req.path,
+        method: c.req.method,
+        error,
+      });
+    }
     
     return c.json({
-        error: "Internal server error",
+      error: isDevelopment && error instanceof Error
+        ? error.message
+        : "Internal server error",
     }, 500);
 });
 

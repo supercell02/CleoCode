@@ -1,9 +1,9 @@
-import { Mode } from "@CleoCode/database/enums";
+import { Mode, type ModeType } from "@CleoCode/shared";
 import { useTheme } from "../../providers/theme";
 import { EmptyBorder } from "../border";
 type Props ={
     message: string;
-    mode: Mode;
+    mode: ModeType;
 };
 
 export function UserMessage({ message, mode }: Props) {
