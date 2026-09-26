@@ -1,6 +1,6 @@
 import { useTheme } from "../providers/theme";
 import { usePromptConfig } from "../providers/prompt-config";
-import { Mode } from "../../../database/generated/prisma/client";
+import { Mode } from "@CleoCode/shared";
 export function Header() { 
     const { mode } = usePromptConfig();
     const { colors } = useTheme();
