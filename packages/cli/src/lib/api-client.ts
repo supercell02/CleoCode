@@ -2,8 +2,10 @@ import {hc} from "hono/client";
 import type { AppType } from "@CleoCode/server";
 import { clearAuth, getAuth } from "./auth";
 
+const apiUrl = (process.env.API_URL ?? "").trim() || "http://localhost:3000";
+
 export const apiClient = hc<AppType>(
-    process.env.API_URL || "http://localhost:3000",
+    apiUrl,
     {
         fetch: async (
             input: Parameters<typeof fetch>[0], 

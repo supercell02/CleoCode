@@ -4,13 +4,25 @@
   "workspaces": ["packages/*"],
   "scripts": {
     "dev:cli": "bun run --watch packages/cli/src/index.tsx",
-    "dev:server": "bun run --hot packages/server/src/index.ts"
+    "dev:server": "bun run --hot packages/server/src/index.ts",
+    "build:cli": "bun run --filter @CleoCode/cli build",
+    "link:cli": "bun run build:cli && cd packages/cli && bun link"
   },
   "dependencies": {
     "@CleoCode/shared": "workspace:*",
+    "@opentui/core": "0.5.12",
+    "@opentui/core-darwin-arm64": "0.5.12",
+    "@opentui/core-darwin-x64": "0.5.12",
+    "@opentui/core-linux-arm64": "0.5.12",
+    "@opentui/core-linux-arm64-musl": "0.5.12",
+    "@opentui/core-linux-x64": "0.5.12",
+    "@opentui/core-linux-x64-musl": "0.5.12",
+    "@opentui/core-win32-arm64": "0.5.12",
+    "dotenv": "^18.0.4",
     "hono": "^4.13.4"
   },
   "devDependencies": {
+    "@opentui/core-win32-x64": "^0.5.12",
     "@types/bun": "^1.4.2"
   }
 }

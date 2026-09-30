@@ -1,0 +1,28 @@
+#!/usr/bin/env bun
+import dotenv from "dotenv";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const binFile = fileURLToPath(import.meta.url);
+const binDir = path.dirname(binFile);
+const packageDir = path.resolve(binDir, "..");
+const distDir = path.join(packageDir, "dist");
+const repoEnvPath = path.resolve(packageDir, "../..", ".env");
+
+process.env.CLEOCODE_ORIGINAL_CWD ??= process.cwd();
+const cwdEnvPath = path.resolve(process.env.CLEOCODE_ORIGINAL_CWD, ".env");
+
+dotenv.config({
+  path: repoEnvPath,
+  quiet: true,
+});
+
+dotenv.config({
+  path: cwdEnvPath,
+  quiet: true,
+  override: true,
+});
+
+process.chdir(distDir);
+
+await import("../dist/index.js");
