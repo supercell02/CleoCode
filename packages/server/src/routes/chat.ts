@@ -141,11 +141,18 @@ const app = new Hono<AuthenticatedEnv>().post(
         }
 
         if (part.type !== "finish") return undefined;
+        // `part.totalUsage` is the synchronous source of truth on the finish
+        // chunk. The outer `completedUsage` (set in `streamText onFinish`) is
+        // only a fallback — it may not have fired yet when this runs, which
+        // previously dropped `usage` and left client totals at zero.
+        const usage = part.totalUsage ?? completedUsage;
+        const hasBillableUsage =
+          usage?.inputTokens != null && usage?.outputTokens != null;
         return {
           mode,
           model,
           durationMs: Date.now() - startTime,
-          ...(completedUsage ? { usage: completedUsage } : {}),
+          ...(hasBillableUsage ? { usage } : {}),
         };
       },
       async onFinish(event) {
