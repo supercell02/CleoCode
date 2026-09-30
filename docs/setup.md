@@ -8,7 +8,7 @@
 ## 1. Clone + install
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/supercell02/CleoCode
 cd CleoCode
 bun install
 ```
