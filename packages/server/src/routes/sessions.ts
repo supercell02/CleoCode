@@ -7,6 +7,12 @@ import { db } from "@CleoCode/database";
 
 import type { AuthenticatedEnv } from '../middleware/require-auth';
 import { requireCreditsBalance } from '../middleware/require-credits-balance';
+import { getSessionUsage, type UsageMessageLike } from '../lib/credits';
+
+function toUsageMessages(messages: unknown): UsageMessageLike[] {
+    if (!Array.isArray(messages)) return [];
+    return messages as unknown as UsageMessageLike[];
+}
 
 const createSessionSchema = z.object({
     title:z.string(),
@@ -27,6 +33,26 @@ const createSessionValidator = zValidator(
 const app = new Hono<AuthenticatedEnv>()
     .get("/", async (c) => {
         const userId = c.get("userId");
+        const withUsage = c.req.query("withUsage") === "true";
+
+        if (!withUsage) {
+            const sessions = await db.session.findMany({
+                where:{userId},
+                orderBy: { createdAt: "desc" },
+                select: {
+                    id: true,
+                    title: true,
+                    createdAt: true,
+                }
+            });
+
+            Sentry.logger.info("Listed sessions",{
+                count: sessions.length,
+            });
+
+            return c.json(sessions);
+        }
+
         const sessions = await db.session.findMany({
             where:{userId},
             orderBy: { createdAt: "desc" },
@@ -34,14 +60,20 @@ const app = new Hono<AuthenticatedEnv>()
                 id: true,
                 title: true,
                 createdAt: true,
+                messages: true,
             }
         });
 
-        Sentry.logger.info("Listed sessions",{
-            count: sessions.length,
+        const withTotals = sessions.map(({ messages, ...rest }) => ({
+            ...rest,
+            usage: getSessionUsage(toUsageMessages(messages)),
+        }));
+
+        Sentry.logger.info("Listed sessions with usage",{
+            count: withTotals.length,
         });
 
-        return c.json(sessions);
+        return c.json(withTotals);
     })
     .get("/:id",async (c) => {
         // await new Promise((r) => setTimeout(r, 5000));
@@ -69,7 +101,8 @@ const app = new Hono<AuthenticatedEnv>()
                 sessionid: session.id,
                 userId: userId,
             });
-        return c.json(session);
+        const usage = getSessionUsage(toUsageMessages(session.messages));
+        return c.json({ ...session, usage });
     })
     .post("/", requireCreditsBalance, createSessionValidator, async (c) => {
         //  await new Promise((r) => setTimeout(r, 5000));
