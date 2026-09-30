@@ -1,8 +1,14 @@
 import {
     SUPPORTED_CHAT_MODELS,
+    estimateCostUsd,
     findSupportedChatModel,
     type ModelPricing,
+    type TokenCounts,
 } from "@CleoCode/shared";
+
+// Re-exported so existing imports from `lib/credits` keep working;
+// canonical implementation lives in `@CleoCode/shared` (no SDK imports).
+export { estimateCostUsd, type TokenCounts } from "@CleoCode/shared";
 
 import type { LanguageModelUsage } from "ai";
 
@@ -53,13 +59,6 @@ export type SessionUsageBreakdown = SessionUsage & {
     perMessage: PerMessageUsage[];
 };
 
-type TokenCounts = {
-    inputTokens: number;
-    outputTokens: number;
-};
-
-const TOKEN_PER_MILLION = 1_000_000;
-
 const USD_PER_CREDIT = 0.01;
 
 // Counting rule (verified against `ai` v7 LanguageModelUsage, 2026-09-30):
@@ -102,12 +101,6 @@ function getModelPricing(provider: string, model: string): ModelPricing {
     }
 
     return supportedModel.pricing;
-};
-
-export function estimateCostUsd({ inputTokens, outputTokens }: TokenCounts, pricing: ModelPricing) {
-    return (
-        (inputTokens * pricing.inputUsdPerMillionTokens + outputTokens * pricing.outputUsdPerMillionTokens) / TOKEN_PER_MILLION
-    );
 };
 
 function convertUsdToCredits(estimatedCostUsd: number) {
