@@ -32,7 +32,7 @@ Empowering developers and teams with:
 
 1. **Clone the repository**
     ```bash
-    git clone <repository-url>
+    git clone https://github.com/supercell02/CleoCode
     cd CleoCode
     ```
 
@@ -114,7 +114,7 @@ For questions or suggestions, please open an issue.
 
 ## Community & Support
 
-- Issues & feature requests: [GitHub Issues](<repository-url>/issues)
+- Issues & feature requests: [GitHub Issues](https://github.com/supercell02/CleoCode/issues)
 - Discussions: Coming soon!
 - Contact maintainer: [your-email@domain.com] (update as needed)
 
