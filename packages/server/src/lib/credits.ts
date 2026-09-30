@@ -28,6 +28,31 @@ export type SessionUsage = {
     credits: number;
 };
 
+// Minimal shape for aggregation — matches `ChatMessageMetadata` in
+// `routes/chat.ts:30-35` and `hooks/use-chat.tsx:20-25` without importing
+// `UIMessage` (keeps `lib/credits.ts` free of UI/tool types).
+export type UsageMessageLike = {
+    id: string;
+    metadata?: {
+        model?: string;
+        usage?: LanguageModelUsage;
+    } | null;
+};
+
+export type PerMessageUsage = {
+    messageId: string;
+    model: string;
+    provider: string;
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+    costUsd: number;
+};
+
+export type SessionUsageBreakdown = SessionUsage & {
+    perMessage: PerMessageUsage[];
+};
+
 type TokenCounts = {
     inputTokens: number;
     outputTokens: number;
@@ -91,6 +116,75 @@ function convertUsdToCredits(estimatedCostUsd: number) {
     }
 
     return Math.max(1, Math.ceil(estimatedCostUsd / USD_PER_CREDIT));
+};
+
+function roundTo(value: number, decimals: number) {
+    const factor = 10 ** decimals;
+    return Math.round(value * factor) / factor;
+}
+
+function getBillableCounts(usage: LanguageModelUsage): TokenCounts | null {
+    const inputTokens = usage.inputTokens;
+    const outputTokens = usage.outputTokens;
+
+    if (inputTokens == null || outputTokens == null) {
+        return null;
+    }
+
+    return { inputTokens, outputTokens };
+}
+
+// Session aggregation (Phase 1.3). Never throws on history: messages without
+// usage (aborted streams in `routes/chat.ts:152-154`, pre-feature history),
+// without a model, or with an unknown model are skipped (contribute 0).
+// Per-model pricing handles mid-session switches via `/models`.
+// Per-message cost rounded to 6 decimals; session total summed from raw costs
+// then rounded to 4 decimals; credits derived from the rounded total.
+export function getSessionUsage(messages: readonly UsageMessageLike[]): SessionUsageBreakdown {
+    const perMessage: PerMessageUsage[] = [];
+    let inputTokens = 0;
+    let outputTokens = 0;
+    let rawCostUsd = 0;
+
+    for (const message of messages) {
+        const model = message.metadata?.model;
+        const usage = message.metadata?.usage;
+
+        if (!model || !usage) continue;
+
+        const counts = getBillableCounts(usage);
+        if (!counts) continue;
+
+        const supportedModel = findSupportedChatModel(model);
+        if (!supportedModel) continue;
+
+        const costUsd = roundTo(estimateCostUsd(counts, supportedModel.pricing), 6);
+
+        inputTokens += counts.inputTokens;
+        outputTokens += counts.outputTokens;
+        rawCostUsd += estimateCostUsd(counts, supportedModel.pricing);
+
+        perMessage.push({
+            messageId: message.id,
+            model,
+            provider: supportedModel.provider,
+            inputTokens: counts.inputTokens,
+            outputTokens: counts.outputTokens,
+            totalTokens: counts.inputTokens + counts.outputTokens,
+            costUsd,
+        });
+    }
+
+    const costUsd = roundTo(rawCostUsd, 4);
+
+    return {
+        inputTokens,
+        outputTokens,
+        totalTokens: inputTokens + outputTokens,
+        costUsd,
+        credits: convertUsdToCredits(costUsd),
+        perMessage,
+    };
 };
 
 export function calculateCreditsForUsage({ 
