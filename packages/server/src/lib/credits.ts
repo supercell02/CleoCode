@@ -6,13 +6,25 @@ import {
 
 import type { LanguageModelUsage } from "ai";
 
-type CalculateCreditsForUsageParams = {
+export type CalculateCreditsForUsageParams = {
     provider: string;
     model: string;
     usage: LanguageModelUsage;
 };
 
-type BillableUsage = {
+export type BillableUsage = {
+    credits: number;
+    costUsd: number;
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+};
+
+export type SessionUsage = {
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+    costUsd: number;
     credits: number;
 };
 
@@ -52,7 +64,7 @@ function getModelPricing(provider: string, model: string): ModelPricing {
     return supportedModel.pricing;
 };
 
-function estimateCostUsd({ inputTokens, outputTokens }: TokenCounts, pricing: ModelPricing) {
+export function estimateCostUsd({ inputTokens, outputTokens }: TokenCounts, pricing: ModelPricing) {
     return (
         (inputTokens * pricing.inputUsdPerMillionTokens + outputTokens * pricing.outputUsdPerMillionTokens) / TOKEN_PER_MILLION
     );
@@ -77,6 +89,10 @@ export function calculateCreditsForUsage({
     const credits = convertUsdToCredits(estimatedCostUsd);
 
     return { 
-        credits 
+        credits,
+        costUsd: estimatedCostUsd,
+        inputTokens: tokenCounts.inputTokens,
+        outputTokens: tokenCounts.outputTokens,
+        totalTokens: tokenCounts.inputTokens + tokenCounts.outputTokens,
     };
 };
