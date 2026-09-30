@@ -37,6 +37,21 @@ const TOKEN_PER_MILLION = 1_000_000;
 
 const USD_PER_CREDIT = 0.01;
 
+// Counting rule (verified against `ai` v7 LanguageModelUsage, 2026-09-30):
+// - `usage.inputTokens: number | undefined` is the billable input count. It
+//   already includes cached input (`inputTokenDetails.cacheReadTokens` /
+//   `cacheWriteTokens`); do NOT add details on top. Cached tokens bill at the
+//   regular input rate.
+// - `usage.outputTokens: number | undefined` is the billable output count. It
+//   already includes reasoning (`outputTokenDetails.reasoningTokens` +
+//   `textTokens`); do NOT add `reasoningTokens` on top (Anthropic thinking
+//   models in `lib/models.ts` report thinking inside `outputTokens`).
+// - `usage.totalTokens` is ignored for billing; total = input + output to
+//   avoid provider inconsistencies. `totalTokens` may be undefined.
+// - Missing input/output (aborted stream, old history) throws here so Polar
+//   ingest stays strict; session aggregation treats missing as 0 (see
+//   `getSessionUsage` in Phase 1.3).
+
 function getTokenCounts(usage: LanguageModelUsage): TokenCounts {
     const inputTokens = usage.inputTokens;
     const outputTokens = usage.outputTokens;
