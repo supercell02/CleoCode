@@ -150,7 +150,7 @@ export function BotMessage({
                             <>
                             <text attributes={ TextAttributes.DIM } fg={colors.dimSeparator}>›</text>
                             <text attributes={ TextAttributes.DIM }> 
-                                {[prettyMs(durationMs)]}
+                                {prettyMs(durationMs)}
                                 </text>
                             </>
                         )}

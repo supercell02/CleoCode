@@ -5,7 +5,7 @@ import {
     type SupportedChatModelId , 
     Mode,
     type ModeType
-} from "@Cleocode/shared";
+} from "@CleoCode/shared";
 
 type PromptConfigContextValue ={
     mode: ModeType;

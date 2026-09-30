@@ -96,7 +96,11 @@ export function DialogSearchList<T>({
                 onContentChange={handleContentChange}
             />
             {filtered.length === 0 ? (
-                <text attributes={TextAttributes.DIM}>{emptyText}</text>
+                typeof emptyText === "string" || typeof emptyText === "number" ? (
+                    <text attributes={TextAttributes.DIM}>{emptyText}</text>
+                ) : (
+                    emptyText
+                )
             ) : (
                 <scrollbox ref={scrollBoxRef} height={visibleHeight}>
                     {filtered.map((item, i) => {

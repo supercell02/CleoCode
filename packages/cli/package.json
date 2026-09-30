@@ -1,10 +1,18 @@
 {
   "name": "@CleoCode/cli",
-  "module": "src/index.tsx",
+  "module": "dist/index.js",
+  "files": [
+    "bin",
+    "dist"
+  ],
   "type": "module",
   "private": true,
+  "bin": {
+    "cleocode": "./bin/cleocode"
+  },
   "scripts": {
-    "dev": "bun run --watch src/index.tsx"
+    "dev": "bun run --watch src/index.tsx",
+    "build": "bun build src/index.tsx --outdir dist --target bun"
   },
   "devDependencies": {
     "@CleoCode/server": "workspace:*",
@@ -18,8 +26,8 @@
   "dependencies": {
     "@CleoCode/shared": "workspace:*",
     "@ai-sdk/react": "^4.0.117",
-    "@opentui/core": "^0.4.5",
-    "@opentui/react": "^0.4.5",
+    "@opentui/core": "0.5.12",
+    "@opentui/react": "0.5.12",
     "ai": "^7.0.114",
     "date-fns": "^4.4.0",
     "hono": "^4.13.4",

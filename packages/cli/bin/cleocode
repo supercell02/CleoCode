@@ -1,0 +1,27 @@
+#!/usr/bin/env bun
+import dotenv from "dotenv";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const binFile = fileURLToPath(import.meta.url);
+const binDir = path.dirname(binFile);
+const packageDir = path.resolve(binDir, "..");
+const distDir = path.join(packageDir, "dist");
+const repoEnvPath = path.resolve(packageDir, "../..", ".env");
+
+process.env.CLEOCODE_ORIGINAL_CWD ??= process.cwd();
+
+// Security: only load configuration from trusted sources.
+// - Explicit process environment (already set for this invocation)
+// - Repo install .env next to the installed package
+// The launch-directory `.env` is intentionally NOT loaded: promoting it to
+// authority over API_URL would let an attacker-controlled directory redirect
+// authenticated requests and receive the saved bearer token.
+dotenv.config({
+  path: repoEnvPath,
+  quiet: true,
+});
+
+process.chdir(distDir);
+
+await import("../dist/index.js");

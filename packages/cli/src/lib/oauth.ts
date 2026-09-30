@@ -1,5 +1,6 @@
 import open from "open";
 import { saveAuth } from "./auth";
+import { getApiOrigin, resolveApiUrl } from "./config";
 
 const LOGIN_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -17,10 +18,7 @@ function toBase64Url(input: Uint8Array | string) {
 }
 
 async function createPkceChallange(verifier: string) {
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(verifier),
-  );
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
   return toBase64Url(new Uint8Array(digest));
 }
 
@@ -34,9 +32,7 @@ function decodeState(state: string) {
     throw new Error("Invalid state format");
   }
 
-  return JSON.parse(
-    Buffer.from(encoded, "base64").toString("utf-8"),
-  ) as OAuthState;
+  return JSON.parse(Buffer.from(encoded, "base64").toString("utf-8")) as OAuthState;
 }
 
 function getErrorMessage(error: unknown) {
@@ -46,17 +42,19 @@ function getErrorMessage(error: unknown) {
 export async function performLogin() {
   const clerkFrontendApi = process.env.CLERK_FRONTEND_API;
   const clientId = process.env.CLERK_OAUTH_CLIENT_ID;
-  const apiUrl = process.env.API_URL || "http://localhost:3000";
+  // Trusted sources only: explicit env / repo install .env / user config.
+  // Launch-directory .env is never consulted (see bin/cleocode).
+  const apiUrl = resolveApiUrl();
+  const apiOrigin = getApiOrigin(apiUrl);
 
+  if (!apiOrigin) {
+    throw new Error("Invalid API_URL configuration");
+  }
   if (!clerkFrontendApi) {
-    throw new Error(
-      "Missing required environment variable: CLERK_FRONTEND_API",
-    );
+    throw new Error("Missing required environment variable: CLERK_FRONTEND_API");
   }
   if (!clientId) {
-    throw new Error(
-      "Missing required environment variable: CLERK_OAUTH_CLIENT_ID",
-    );
+    throw new Error("Missing required environment variable: CLERK_OAUTH_CLIENT_ID");
   }
 
   const nonce = crypto.randomUUID();
@@ -128,12 +126,10 @@ export async function performLogin() {
 
           const tokenData = (await tokenRes.json()) as { access_token: string };
           settled = true;
-          saveAuth({ token: tokenData.access_token });
+          saveAuth({ token: tokenData.access_token, apiUrl, apiOrigin });
           resolve({ token: tokenData.access_token });
           setTimeout(() => server.stop(), 500);
-          return new Response(
-            "Authentication successful. You can close this tab.",
-          );
+          return new Response("Authentication successful. You can close this tab.");
         } catch (err) {
           settled = true;
           reject(err);
