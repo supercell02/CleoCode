@@ -61,7 +61,7 @@ function SessionChat({
 session: SessionData }) {
   const [initialMessages] = useState(() => session.messages as unknown as Message[]);
   const { isTopLayer } = useKeyboardLayer();
-  const { messages, status, submit, abort , interrupt ,error } = useChat(
+  const { messages, status, sessionUsage, submit, abort , interrupt ,error } = useChat(
     session.id, 
     initialMessages
   );
@@ -98,6 +98,7 @@ session: SessionData }) {
       onSubmit={(text) => submit({ userText: text, mode: mode, model: model })}
       loading={status === "submitted" || status === "streaming"}
       interruptible={status === "submitted" || status === "streaming"}
+      usage={sessionUsage}
     >
       {messages.map((msg) => (
         <ChatMessage key={msg.id} msg={msg} />

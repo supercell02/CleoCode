@@ -14,7 +14,7 @@ import type { TextareaRenderable, ScrollBoxRenderable } from "@opentui/core";
 import { useKeyboard, useRenderer } from "@opentui/react";
 import type { KeyBinding } from "@opentui/core";
 import { EmptyBorder } from "./border";
-import { StatusBar } from "./status-bar";
+import { StatusBar, type StatusBarUsage } from "./status-bar";
 import { CommandMenu } from "./command-menu";
 import type { Command } from "./command-menu/types";
 import { useCommandMenu } from "./command-menu/use-command-menu";
@@ -289,6 +289,7 @@ function FileMentionMenu({
 type Props = {
   onSubmit: (value: string) => void;
   disabled?: boolean;
+  usage?: StatusBarUsage | null;
 };
 
 export const TEXTAREA_KEY_BINDINGS: KeyBinding[] = [
@@ -298,7 +299,7 @@ export const TEXTAREA_KEY_BINDINGS: KeyBinding[] = [
   { name: "enter", shift: true, action: "newline" },
 ];
 
-export function InputBar({ onSubmit, disabled }: Props) {
+export function InputBar({ onSubmit, disabled, usage }: Props) {
   const { mode, toggleMode, setMode, setModel } = usePromptConfig();
   const textareaRef = useRef<TextareaRenderable>(null);
   const onSubmitRef = useRef<() => void>(() => {});
@@ -629,7 +630,7 @@ export function InputBar({ onSubmit, disabled }: Props) {
             keyBindings={TEXTAREA_KEY_BINDINGS}
             onContentChange={handleTextareaContentChange}
           />
-          <StatusBar />
+          <StatusBar usage={usage} />
         </box>
       </box>
     </box>

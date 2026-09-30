@@ -1,6 +1,7 @@
 import { TextAttributes } from "@opentui/core";
 import { Children, type ReactNode } from "react";
 import { InputBar } from "./input-bar";
+import type { StatusBarUsage } from "./status-bar";
 import { Spinner } from "./spinner";
 import { usePromptConfig } from "../providers/prompt-config";
 type Props = {
@@ -9,6 +10,7 @@ type Props = {
   inputDisabled?: boolean;
   loading?: boolean;
   interruptible?: boolean;
+  usage?: StatusBarUsage | null;
 };
 
 export function SessionShell({
@@ -17,6 +19,7 @@ export function SessionShell({
   inputDisabled = false,
   interruptible = false,
   loading = false,
+  usage,
 }: Props) {
   const { mode } = usePromptConfig();
   const normalizedChildren = Children.toArray(children).map((child, index) => {
@@ -43,7 +46,7 @@ export function SessionShell({
         </box>
       </scrollbox>
       <box flexShrink={0}>
-        <InputBar onSubmit={onSubmit} disabled={inputDisabled} />
+        <InputBar onSubmit={onSubmit} disabled={inputDisabled} usage={usage} />
       </box>
       <box
         flexShrink={0}
