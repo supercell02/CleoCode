@@ -13,8 +13,8 @@ import {
   type SupportedChatModelId,
   type ToolContracts,
 } from "@CleoCode/shared";
-import { apiClient } from "../lib/api-client";
-import { getAuth } from "../lib/auth";
+import { apiClient, getConfiguredApiOrigin } from "../lib/api-client";
+import { getAuthForOrigin } from "../lib/auth";
 import { executeLocalTool } from "../lib/local-tools";
 
 export type ChatMessageMetadata = {
@@ -38,7 +38,7 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
     return new DefaultChatTransport<Message>({
       api: apiClient.chat.$url().toString(),
       headers() {
-        const auth = getAuth();
+        const auth = getAuthForOrigin(getConfiguredApiOrigin());
         return auth ? { Authorization: `Bearer ${auth.token}` } : new Headers();
       },
       prepareSendMessagesRequest({ messages }) {
@@ -80,7 +80,7 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
             output,
           }),
       )
-      .catch((error) => 
+      .catch((error) =>
         chat.addToolOutput({
             tool: toolCall.toolName as keyof ChatTools,
             toolCallId: toolCall.toolCallId,
