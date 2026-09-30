@@ -40,8 +40,8 @@ CleoCode/
 2. `requireAuth` → `requireCreditsBalance` → zod validator
 3. `resolveChatModel(model)` picks `anthropic()` or `openai()` + providerOptions
 4. `streamText({ model, system: buildSystemPrompt({mode}), messages, tools: getToolContracts(mode) })`
-5. Stream response with metadata `{ mode, model, durationMs, usage }`
-6. On finish: update `session.messages`, compute credits, `ingestAiUsage()` to Polar
+5. Stream response with metadata `{ mode, model, durationMs, usage }` (`usage: LanguageModelUsage` from `onFinish totalUsage`)
+6. On finish: update `session.messages`, `calculateCreditsForUsage()` → `{ credits, costUsd, inputTokens, outputTokens }`, `ingestAiUsage()` to Polar. Session totals via `getSessionUsage(messages)` on `GET /sessions/:id` (+ `?withUsage=true` for list); see `docs/cost-estimation.md`.
 
 ## Model-agnostic layer
 
