@@ -9,6 +9,8 @@ import {
 } from "ai";
 
 import {
+  estimateCostUsd,
+  findSupportedChatModel,
   type ModeType,
   type SupportedChatModelId,
   type ToolContracts,
@@ -32,6 +34,20 @@ type ChatTools = {
 };
 
 export type Message = UIMessage<ChatMessageMetadata, never, ChatTools>;
+
+export type SessionUsage = {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  costUsd: number;
+};
+
+const EMPTY_SESSION_USAGE: SessionUsage = {
+  inputTokens: 0,
+  outputTokens: 0,
+  totalTokens: 0,
+  costUsd: 0,
+};
 
 export function useChat(sessionId: string, initialMessages: Message[]) {
   const transport = useMemo(() => {
@@ -92,10 +108,51 @@ export function useChat(sessionId: string, initialMessages: Message[]) {
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
   });
 
+  // Running session totals. `metadata.usage` only arrives on `finish`
+  // (server `routes/chat.ts`), so this recomputes exactly once per completed
+  // assistant message. Skips streaming/aborted/history messages without
+  // usage and unknown models (never throws). Mirrors server `getSessionUsage`
+  // totals (per-message pricing, 4-decimal session total).
+  const sessionUsage = useMemo<SessionUsage>(() => {
+    let inputTokens = 0;
+    let outputTokens = 0;
+    let rawCostUsd = 0;
+
+    for (const m of chat.messages) {
+      const model = m.metadata?.model;
+      const usage = m.metadata?.usage;
+      if (!model || !usage) continue;
+
+      const inTokens = usage.inputTokens;
+      const outTokens = usage.outputTokens;
+      if (inTokens == null || outTokens == null) continue;
+
+      const supported = findSupportedChatModel(model);
+      if (!supported) continue;
+
+      inputTokens += inTokens;
+      outputTokens += outTokens;
+      rawCostUsd += estimateCostUsd(
+        { inputTokens: inTokens, outputTokens: outTokens },
+        supported.pricing,
+      );
+    }
+
+    if (inputTokens === 0 && outputTokens === 0) return EMPTY_SESSION_USAGE;
+
+    return {
+      inputTokens,
+      outputTokens,
+      totalTokens: inputTokens + outputTokens,
+      costUsd: Math.round(rawCostUsd * 10000) / 10000,
+    };
+  }, [chat.messages]);
+
   return {
     messages: chat.messages,
     status: chat.status,
     error: chat.error,
+    sessionUsage,
     submit: (params: { userText: string; mode:ModeType; model: SupportedChatModelId }) => {
         return chat.sendMessage({
             text: params.userText,
